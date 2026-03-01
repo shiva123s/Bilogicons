@@ -1,0 +1,12 @@
+[
+    {
+        "id": "example-user-id",
+        "email": "admin@example.com",
+        "passwordHash": "",
+        "displayName": "Admin",
+        "accountType": "individual",
+        "createdAt": "2024-01-01T00:00:00.000Z",
+        "downloads": [],
+        "likes": []
+    }
+]

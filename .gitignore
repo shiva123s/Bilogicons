@@ -1,0 +1,45 @@
+# ─── Dependencies ────────────────────────────────────────────
+/node_modules
+
+# ─── Next.js build output ────────────────────────────────────
+/.next/
+/out/
+/build
+next-env.d.ts
+*.tsbuildinfo
+
+# ─── Environment variables (NEVER commit secrets) ────────────
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*
+
+# ─── LOCAL DATABASE FILES (contain real user data) ───────────
+# These JSON files store password hashes, emails, lab data.
+# Each developer/deployment should have their own copy.
+data/users.json
+data/labs.json
+data/icons.json
+
+# ─── User-uploaded assets (binary / generated at runtime) ────
+public/avatars/
+public/icons/
+
+# ─── OS / Editor junk ────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.pem
+
+# ─── Debug logs ──────────────────────────────────────────────
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ─── Vercel / deployment ─────────────────────────────────────
+.vercel
+
+# ─── Test coverage ───────────────────────────────────────────
+/coverage
