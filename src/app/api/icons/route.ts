@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { getPublicIcons, addIcon, searchIcons } from '@/lib/icons';
 import { supabase } from '@/lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
+import DOMPurify from 'isomorphic-dompurify';
 
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
@@ -33,13 +34,19 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
+    // Sanitize SVG to prevent XSS attacks
+    const cleanSvgContent = DOMPurify.sanitize(svgContent, { USE_PROFILES: { svg: true } });
+    if (!cleanSvgContent.trim()) {
+        return NextResponse.json({ error: 'Invalid or malicious SVG content detected' }, { status: 400 });
+    }
+
     const user = session.user as any;
     const iconId = uuidv4();
 
-    // Upload SVG to Supabase Storage
+    // Upload sanitized SVG to Supabase Storage
     let fileUrl: string | undefined;
     const fileName = `${iconId}.svg`;
-    const buffer = Buffer.from(svgContent, 'utf-8');
+    const buffer = Buffer.from(cleanSvgContent, 'utf-8');
 
     const { error: uploadError } = await supabase.storage
         .from('icons')
@@ -60,7 +67,7 @@ export async function POST(req: NextRequest) {
         name,
         category,
         tags: Array.isArray(tags) ? tags : (tags || '').split(',').map((t: string) => t.trim()).filter(Boolean),
-        svgContent,               // keep inline SVG for backward compatibility
+        svgContent: cleanSvgContent, // sanitized SVG for backward compatibility
         fileUrl,                  // also store the Supabase Storage URL
         uploadedBy: user.id,
         uploaderName: user.name || user.email || 'Anonymous',
