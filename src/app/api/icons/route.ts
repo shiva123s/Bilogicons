@@ -6,6 +6,8 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
 import DOMPurify from 'isomorphic-dompurify';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const query = searchParams.get('q') || '';

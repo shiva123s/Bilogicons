@@ -30,13 +30,20 @@ function GalleryContent() {
 
     const fetchIcons = useCallback(async () => {
         setLoading(true);
-        const params = new URLSearchParams();
-        if (query) params.set('q', query);
-        if (category && category !== 'All') params.set('category', category);
-        const res = await fetch(`/api/icons?${params.toString()}`);
-        const data = await res.json();
-        setIcons(data);
-        setLoading(false);
+        try {
+            const params = new URLSearchParams();
+            if (query) params.set('q', query);
+            if (category && category !== 'All') params.set('category', category);
+            const res = await fetch(`/api/icons?${params.toString()}`);
+            if (!res.ok) throw new Error('API returned an error');
+            const data = await res.json();
+            setIcons(data);
+        } catch (err) {
+            console.error("Fetch error:", err);
+            setIcons([]);
+        } finally {
+            setLoading(false);
+        }
     }, [query, category]);
 
     useEffect(() => { fetchIcons(); }, [fetchIcons]);
