@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { getLabById, updateLab } from '@/lib/labs';
+import { getLabById } from '@/lib/labs';
 import { findUserByEmail } from '@/lib/users';
+import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 
 // POST /api/labs/[id]/invite — supervisor invites a user by email (in-app only)
@@ -35,22 +36,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         return NextResponse.json({ error: 'This user is already a member of the lab' }, { status: 409 });
     }
 
-    // Check for existing pending invite
-    if (lab.pendingInvites.find(i => i.email === emailLower)) {
+    // Check for existing pending invite via Prisma
+    const existingInvite = await prisma.invite.findFirst({
+        where: { labId: id, email: emailLower },
+    });
+    if (existingInvite) {
         return NextResponse.json({ error: 'An invitation is already pending for this email' }, { status: 409 });
     }
 
+    // Create invite directly in the Invite table
     const token = crypto.randomBytes(32).toString('hex');
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    await updateLab(id, {
-        pendingInvites: [...lab.pendingInvites, {
+    await prisma.invite.create({
+        data: {
             email: emailLower,
             token,
-            invitedAt: now.toISOString(),
-            expiresAt: expiresAt.toISOString(),
-        }],
+            invitedAt: now,
+            expiresAt,
+            labId: id,
+        },
     });
 
     const appUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
@@ -79,8 +85,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     const { email } = await req.json();
-    await updateLab(id, {
-        pendingInvites: lab.pendingInvites.filter(i => i.email !== email.toLowerCase()),
+    await prisma.invite.deleteMany({
+        where: { labId: id, email: email.toLowerCase() },
     });
 
     return NextResponse.json({ success: true });

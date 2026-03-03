@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { getPublicIcons, addIcon, searchIcons } from '@/lib/icons';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
 import DOMPurify from 'isomorphic-dompurify';
 
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     let icons;
     if (query || category) {
         icons = await searchIcons(query, category || undefined);
-        icons = icons.filter(i => !i.isLabPrivate);
+        icons = icons.filter((i: any) => !i.isLabPrivate);
     } else {
         icons = await getPublicIcons();
     }
@@ -43,32 +43,38 @@ export async function POST(req: NextRequest) {
     const user = session.user as any;
     const iconId = uuidv4();
 
-    // Upload sanitized SVG to Supabase Storage
-    let fileUrl: string | undefined;
-    const fileName = `${iconId}.svg`;
+    // Check file size (2MB limit)
     const buffer = Buffer.from(cleanSvgContent, 'utf-8');
+    if (buffer.length > 2 * 1024 * 1024) {
+        return NextResponse.json({ error: 'File size exceeds 2MB limit' }, { status: 400 });
+    }
 
-    const { error: uploadError } = await supabase.storage
+    // Upload sanitized SVG to Supabase Storage using admin client (bypasses RLS)
+    const fileName = `${iconId}.svg`;
+    const { error: uploadError } = await supabaseAdmin.storage
         .from('icons')
         .upload(fileName, buffer, {
             contentType: 'image/svg+xml',
             upsert: false,
         });
 
-    if (!uploadError) {
-        const { data: urlData } = supabase.storage
-            .from('icons')
-            .getPublicUrl(fileName);
-        fileUrl = urlData.publicUrl;
+    if (uploadError) {
+        console.error('Supabase Storage upload failed:', uploadError);
+        return NextResponse.json({ error: 'Failed to upload icon to storage' }, { status: 500 });
     }
+
+    const { data: urlData } = supabaseAdmin.storage
+        .from('icons')
+        .getPublicUrl(fileName);
+    const fileUrl = urlData.publicUrl;
 
     const icon = {
         id: iconId,
         name,
         category,
         tags: Array.isArray(tags) ? tags : (tags || '').split(',').map((t: string) => t.trim()).filter(Boolean),
-        svgContent: cleanSvgContent, // sanitized SVG for backward compatibility
-        fileUrl,                  // also store the Supabase Storage URL
+        svgContent: cleanSvgContent,
+        fileUrl,
         uploadedBy: user.id,
         uploaderName: user.name || user.email || 'Anonymous',
         labId: isLabPrivate && user.labId ? user.labId : undefined,
