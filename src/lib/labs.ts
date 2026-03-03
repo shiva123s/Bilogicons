@@ -38,7 +38,7 @@ function toPlain(row: any, invites?: any[]): Lab {
 
 export async function getAllLabs(): Promise<Lab[]> {
     const rows = await prisma.lab.findMany({ include: { invites: true } });
-    return rows.map(r => toPlain(r));
+    return rows.map((r: any) => toPlain(r));
 }
 
 export async function getLabById(id: string): Promise<Lab | null> {
@@ -85,7 +85,7 @@ export async function updateLab(id: string, updates: Partial<Lab>): Promise<void
         // Re-create with the new set
         if (updates.pendingInvites.length > 0) {
             await prisma.invite.createMany({
-                data: updates.pendingInvites.map(inv => ({
+                data: updates.pendingInvites.map((inv: any) => ({
                     email: inv.email,
                     token: inv.token,
                     invitedAt: new Date(inv.invitedAt),
@@ -112,7 +112,7 @@ export async function getLabsByMember(userId: string): Promise<Lab[]> {
         },
         include: { invites: true },
     });
-    return rows.map(r => toPlain(r));
+    return rows.map((r: any) => toPlain(r));
 }
 
 export async function getLabBySupervisor(supervisorId: string): Promise<Lab | null> {
