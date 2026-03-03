@@ -1,95 +1,141 @@
-import { promises as fs } from 'fs';
-import path from 'path';
+import { prisma } from './prisma';
 
 export interface LabInvite {
-    email: string;       // invitee email
-    token: string;       // random token for secure accept link
-    invitedAt: string;   // ISO timestamp
-    expiresAt: string;   // ISO timestamp (7 days)
+    email: string;
+    token: string;
+    invitedAt: string;
+    expiresAt: string;
 }
 
 export interface Lab {
-    id: string;           // unique lab ID (e.g. "smithlab2024")
-    name: string;         // display name (e.g. "Smith Lab")
+    id: string;
+    name: string;
     description?: string;
-    supervisorId: string; // userId of the lab supervisor/creator
-    memberIds: string[];  // array of userIds who have joined
-    pendingInvites: LabInvite[]; // structured invites with tokens
+    supervisorId: string;
+    memberIds: string[];
+    pendingInvites: LabInvite[];
     createdAt: string;
 }
 
-const LABS_FILE = path.join(process.cwd(), 'data', 'labs.json');
-
-async function readLabs(): Promise<Lab[]> {
-    try {
-        const data = await fs.readFile(LABS_FILE, 'utf-8');
-        const parsed = JSON.parse(data) as any[];
-        // Migrate legacy string-based pendingInvites to LabInvite objects
-        return parsed.map(l => ({
-            ...l,
-            pendingInvites: (l.pendingInvites || []).map((inv: any) =>
-                typeof inv === 'string'
-                    ? { email: inv, token: '', invitedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 7 * 864e5).toISOString() }
-                    : inv
-            ),
-        }));
-    } catch {
-        return [];
-    }
-}
-
-async function writeLabs(labs: Lab[]): Promise<void> {
-    await fs.writeFile(LABS_FILE, JSON.stringify(labs, null, 2));
+/** Convert a Prisma Lab + Invites into the plain interface the API routes already expect */
+function toPlain(row: any, invites?: any[]): Lab {
+    const pendingInvites: LabInvite[] = (invites ?? row.invites ?? []).map((i: any) => ({
+        email: i.email,
+        token: i.token,
+        invitedAt: i.invitedAt instanceof Date ? i.invitedAt.toISOString() : i.invitedAt,
+        expiresAt: i.expiresAt instanceof Date ? i.expiresAt.toISOString() : i.expiresAt,
+    }));
+    return {
+        id: row.id,
+        name: row.name,
+        description: row.description ?? undefined,
+        supervisorId: row.supervisorId,
+        memberIds: row.memberIds ?? [],
+        pendingInvites,
+        createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+    };
 }
 
 export async function getAllLabs(): Promise<Lab[]> {
-    return readLabs();
+    const rows = await prisma.lab.findMany({ include: { invites: true } });
+    return rows.map(r => toPlain(r));
 }
 
 export async function getLabById(id: string): Promise<Lab | null> {
-    const labs = await readLabs();
-    return labs.find(l => l.id === id) || null;
+    const row = await prisma.lab.findUnique({
+        where: { id },
+        include: { invites: true },
+    });
+    return row ? toPlain(row) : null;
 }
 
 export async function createLab(lab: Lab): Promise<Lab> {
-    const labs = await readLabs();
-    const existing = labs.find(l => l.id === lab.id);
+    const existing = await prisma.lab.findUnique({ where: { id: lab.id } });
     if (existing) throw new Error('A lab with this ID already exists');
-    labs.push(lab);
-    await writeLabs(labs);
-    return lab;
+
+    const row = await prisma.lab.create({
+        data: {
+            id: lab.id,
+            name: lab.name,
+            description: lab.description ?? '',
+            supervisorId: lab.supervisorId,
+            memberIds: lab.memberIds,
+        },
+        include: { invites: true },
+    });
+    return toPlain(row);
 }
 
 export async function updateLab(id: string, updates: Partial<Lab>): Promise<void> {
-    const labs = await readLabs();
-    const idx = labs.findIndex(l => l.id === id);
-    if (idx !== -1) {
-        labs[idx] = { ...labs[idx], ...updates };
-        await writeLabs(labs);
+    // Handle regular lab field updates
+    const labData: Record<string, any> = {};
+    if (updates.name !== undefined) labData.name = updates.name;
+    if (updates.description !== undefined) labData.description = updates.description;
+    if (updates.memberIds !== undefined) labData.memberIds = updates.memberIds;
+    if (updates.supervisorId !== undefined) labData.supervisorId = updates.supervisorId;
+
+    if (Object.keys(labData).length > 0) {
+        await prisma.lab.update({ where: { id }, data: labData });
+    }
+
+    // Handle pendingInvites — replace the entire set in the Invite table
+    if (updates.pendingInvites !== undefined) {
+        // Delete existing invites for this lab
+        await prisma.invite.deleteMany({ where: { labId: id } });
+        // Re-create with the new set
+        if (updates.pendingInvites.length > 0) {
+            await prisma.invite.createMany({
+                data: updates.pendingInvites.map(inv => ({
+                    email: inv.email,
+                    token: inv.token,
+                    invitedAt: new Date(inv.invitedAt),
+                    expiresAt: new Date(inv.expiresAt),
+                    labId: id,
+                })),
+            });
+        }
     }
 }
 
 export async function deleteLab(id: string): Promise<void> {
-    const labs = await readLabs();
-    await writeLabs(labs.filter(l => l.id !== id));
+    // Invites cascade-deleted via onDelete: Cascade in schema
+    await prisma.lab.delete({ where: { id } });
 }
 
 export async function getLabsByMember(userId: string): Promise<Lab[]> {
-    const labs = await readLabs();
-    return labs.filter(l => l.memberIds.includes(userId) || l.supervisorId === userId);
+    const rows = await prisma.lab.findMany({
+        where: {
+            OR: [
+                { memberIds: { has: userId } },
+                { supervisorId: userId },
+            ],
+        },
+        include: { invites: true },
+    });
+    return rows.map(r => toPlain(r));
 }
 
 export async function getLabBySupervisor(supervisorId: string): Promise<Lab | null> {
-    const labs = await readLabs();
-    return labs.find(l => l.supervisorId === supervisorId) || null;
+    const row = await prisma.lab.findFirst({
+        where: { supervisorId },
+        include: { invites: true },
+    });
+    return row ? toPlain(row) : null;
 }
 
-// Find a lab that has a pending invite with the given token
 export async function getLabByInviteToken(token: string): Promise<{ lab: Lab; invite: LabInvite } | null> {
-    const labs = await readLabs();
-    for (const lab of labs) {
-        const invite = lab.pendingInvites.find(i => i.token === token);
-        if (invite) return { lab, invite };
-    }
-    return null;
+    const inviteRow = await prisma.invite.findUnique({
+        where: { token },
+        include: { lab: { include: { invites: true } } },
+    });
+    if (!inviteRow) return null;
+
+    const lab = toPlain(inviteRow.lab);
+    const invite: LabInvite = {
+        email: inviteRow.email,
+        token: inviteRow.token,
+        invitedAt: inviteRow.invitedAt instanceof Date ? inviteRow.invitedAt.toISOString() : String(inviteRow.invitedAt),
+        expiresAt: inviteRow.expiresAt instanceof Date ? inviteRow.expiresAt.toISOString() : String(inviteRow.expiresAt),
+    };
+    return { lab, invite };
 }

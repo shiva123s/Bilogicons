@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { findUserById, updateUser } from '@/lib/users';
-import { writeFile } from 'fs/promises';
-import path from 'path';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(req: NextRequest) {
     const session = await getServerSession(authOptions);
@@ -32,9 +31,21 @@ export async function PATCH(req: NextRequest) {
         const buffer = Buffer.from(bytes);
         const ext = avatarFile.name.split('.').pop() || 'jpg';
         const filename = `${user.id}.${ext}`;
-        const avatarPath = path.join(process.cwd(), 'public', 'avatars', filename);
-        await writeFile(avatarPath, buffer);
-        updates.avatarUrl = `/avatars/${filename}`;
+
+        // Upload avatar to Supabase Storage 'avatars' bucket
+        const { error: uploadError } = await supabase.storage
+            .from('avatars')
+            .upload(filename, buffer, {
+                contentType: avatarFile.type || 'image/jpeg',
+                upsert: true, // overwrite existing avatar
+            });
+
+        if (!uploadError) {
+            const { data: urlData } = supabase.storage
+                .from('avatars')
+                .getPublicUrl(filename);
+            updates.avatarUrl = urlData.publicUrl;
+        }
     }
 
     await updateUser(user.id, updates);

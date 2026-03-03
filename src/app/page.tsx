@@ -39,7 +39,11 @@ export default async function Home() {
             <div className="hero-floating-icons">
               {featured.map((icon) => (
                 <div key={icon.id} className="hero-icon-card" title={icon.name}>
-                  <div dangerouslySetInnerHTML={{ __html: icon.svgContent }} />
+                  {icon.svgContent ? (
+                    <div dangerouslySetInnerHTML={{ __html: icon.svgContent }} />
+                  ) : icon.fileUrl ? (
+                    <img src={icon.fileUrl} alt={icon.name} style={{ width: 64, height: 64, objectFit: 'contain' }} />
+                  ) : null}
                 </div>
               ))}
             </div>

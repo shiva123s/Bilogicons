@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── User ───────────────────────────────────────────────────
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  displayName  String
+  accountType  String   @default("individual") // "individual" | "lab"
+  labId        String?
+  labName      String?
+  labRole      String?  // "supervisor" | "member"
+  avatarUrl    String?
+  downloads    String[] @default([])
+  likes        String[] @default([])
+  createdAt    DateTime @default(now())
+
+  lab           Lab?   @relation(fields: [labId], references: [id], onDelete: SetNull)
+  uploadedIcons Icon[] @relation("IconUploader")
+}
+
+// ─── Lab ────────────────────────────────────────────────────
+model Lab {
+  id           String   @id
+  name         String
+  description  String?
+  supervisorId String
+  memberIds    String[] @default([])
+  createdAt    DateTime @default(now())
+
+  members User[]
+  invites Invite[]
+}
+
+// ─── Invite (was nested in Lab JSON as pendingInvites) ──────
+model Invite {
+  id        String   @id @default(uuid())
+  email     String
+  token     String   @unique
+  invitedAt DateTime @default(now())
+  expiresAt DateTime
+  labId     String
+
+  lab Lab @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@index([labId])
+  @@index([email])
+}
+
+// ─── Icon ───────────────────────────────────────────────────
+model Icon {
+  id           String   @id @default(uuid())
+  name         String
+  category     String
+  tags         String[] @default([])
+  svgContent   String?  // inline SVG for built-in icons
+  fileUrl      String?  // Supabase Storage URL for uploaded icons
+  uploadedBy   String?  // "system" or userId
+  uploaderName String
+  labId        String?
+  isLabPrivate Boolean  @default(false)
+  downloads    Int      @default(0)
+  likes        Int      @default(0)
+  likedBy      String[] @default([])
+  createdAt    DateTime @default(now())
+  fileName     String?
+
+  uploader User? @relation("IconUploader", fields: [uploadedBy], references: [id], onDelete: SetNull)
+
+  @@index([category])
+  @@index([uploadedBy])
+  @@index([isLabPrivate])
+}

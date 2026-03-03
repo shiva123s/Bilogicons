@@ -118,7 +118,13 @@ function GalleryContent() {
                     {icons.map(icon => (
                         <div key={icon.id} className={`icon-card ${catClass(icon.category)}`} style={{ borderLeftColor: CAT_COLORS[icon.category] || '#0ea5e9' }}>
                             <div className="icon-preview">
-                                <div dangerouslySetInnerHTML={{ __html: icon.svgContent }} style={{ width: 110, height: 110 }} />
+                                {icon.svgContent ? (
+                                    <div dangerouslySetInnerHTML={{ __html: icon.svgContent }} style={{ width: 110, height: 110 }} />
+                                ) : icon.fileUrl ? (
+                                    <img src={icon.fileUrl} alt={icon.name} style={{ width: 110, height: 110, objectFit: 'contain' }} />
+                                ) : (
+                                    <div style={{ width: 110, height: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>No preview</div>
+                                )}
                             </div>
                             <div className="icon-info">
                                 <div className="icon-name">{icon.name}</div>
