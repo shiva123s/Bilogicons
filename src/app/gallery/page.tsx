@@ -4,6 +4,8 @@ import { useSession } from 'next-auth/react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+export const dynamic = 'force-dynamic';
+
 const CATEGORIES = ['All', 'Cell Biology', 'Microbiology', 'Lab Equipment', 'Arrows', 'Shapes', 'Neuroscience', 'Plant Biology', 'Biochemistry', 'Drosophila', 'Mosquito', 'Biologicals', 'Bioinfo'];
 
 const CAT_COLORS: Record<string, string> = {
